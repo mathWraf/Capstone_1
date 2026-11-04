@@ -43,3 +43,51 @@ ON st.StoreDate = ot.OnlineDate;
 
 -- 
 SELECT * FROM Management WHERE Region = "West";
+
+
+-- Find number of transactions per month
+WITH S_Total_Transactions AS (
+SELECT DATE_FORMAT(ss.Transaction_Date, "%m/%Y") AS StoreDate, COUNT(DATE_FORMAT(ss.Transaction_Date, "%m/%d/%Y")) AS store_transactions
+FROM Store_Sales ss
+LEFT JOIN Store_Locations sl
+ON ss.Store_ID = sl.StoreId
+WHERE sl.State = "Colorado"
+GROUP BY StoreDate),
+
+O_Total_Transactions AS (
+SELECT DATE_FORMAT(Date, "%m/%Y") AS OnlineDate, COUNT(DATE_FORMAT(Date, "%m/%d/%Y")) AS online_transactions
+FROM Online_Sales
+WHERE ShiptoState = "Colorado"
+GROUP BY OnlineDate)
+
+SELECT s.StoreDate, s.store_transactions + COALESCE(o.online_transactions, 0) AS monthly_transactions 
+FROM S_Total_Transactions s
+LEFT JOIN O_Total_Transactions o
+ON s.StoreDate = o.OnlineDate;
+
+-- Average transaction amount by product category
+
+WITH category_transaction AS (
+SELECT ic.Category, COUNT(s.Prod_Num) + COUNT(o.ProdNum) AS total_transaction
+FROM Inventory_Categories ic
+LEFT JOIN Products p
+ON ic.CategoryId = p.CategoryId
+LEFT JOIN Store_Sales s
+ON p.ProdNum = s.Prod_Num
+LEFT JOIN Online_Sales o
+ON p.ProdNum = o.ProdNum
+LEFT JOIN Store_Locations sl
+ON s.Store_ID = sl.StoreId
+WHERE sl.State = "Colorado" AND o.ShiptoState = "Colorado"
+GROUP BY ic.Category)
+
+SELECT AVG(total_transaction) AS average_transaction FROM category_transaction;
+
+-- 
+SELECT ss.Store_ID, sl.StoreLocation, SUM(ss.Sale_Amount) AS total_sales
+FROM Store_Sales ss
+LEFT JOIN Store_Locations sl
+ON ss.Store_ID = sl.StoreId
+WHERE sl.State = "Colorado"
+GROUP BY ss.Store_ID
+ORDER BY total_sales DESC;

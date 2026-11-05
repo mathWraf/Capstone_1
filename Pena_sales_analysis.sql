@@ -1,7 +1,7 @@
 -- Colorado sales territory.
 USE sample_sales;
 
--- Find total revenue
+-- 4.1) Find total revenue
 WITH S_Totals AS (
 SELECT SUM(ss.Sale_Amount) AS store_revenue, MIN(ss.Transaction_Date) AS S_Start_Date, MAX(ss.Transaction_Date) AS S_End_Date
 FROM Store_Sales ss
@@ -21,7 +21,7 @@ JOIN O_Totals AS ot;
 
 SELECT Date, SalesTotal FROM Online_Sales WHERE ShiptoState = "Colorado";
 
--- Revenue breakdown by year and month
+-- 4.2) Revenue breakdown by year and month
 WITH Store_Totals AS (
 SELECT DATE_FORMAT(ss.Transaction_Date, "%m/%Y") AS StoreDate, SUM(ss.Sale_Amount) AS store_amount
 FROM Store_Sales ss
@@ -41,11 +41,29 @@ FROM Store_Totals st
 LEFT JOIN Online_Totals ot
 ON st.StoreDate = ot.OnlineDate;
 
--- 
-SELECT * FROM Management WHERE Region = "West";
+-- 4.3) Comparison of total revenue
+WITH S_Amount AS (
+SELECT SUM(ss.Sale_Amount) AS store_revenue
+FROM Store_Sales ss
+LEFT JOIN Store_Locations sl
+ON ss.Store_ID = sl.StoreId
+WHERE sl.State = "Colorado"),
+
+O_Amount AS (
+SELECT SUM(SalesTotal) online_revenue
+FROM Online_Sales
+WHERE ShiptoState = "Colorado"
+)
+
+SELECT CONCAT(CAST(ROUND(SUM(sa.store_revenue)/(SUM(sa.store_revenue) + SUM(oa.online_revenue)) * 100, 2) AS CHAR), "%") AS store_contribution, 
+CONCAT(CAST(ROUND(SUM(oa.online_revenue)/(SUM(sa.store_revenue) + SUM(oa.online_revenue)) * 100, 2) AS CHAR), "%") AS online_contribution
+FROM S_Amount sa
+JOIN O_Amount oa;
+
+SELECT * FROM Management /*WHERE Region = "West"*/;
 
 
--- Find number of transactions per month
+-- 4.4a) Find number of transactions per month
 WITH S_Total_Transactions AS (
 SELECT DATE_FORMAT(ss.Transaction_Date, "%m/%Y") AS StoreDate, COUNT(DATE_FORMAT(ss.Transaction_Date, "%m/%d/%Y")) AS store_transactions
 FROM Store_Sales ss
@@ -65,7 +83,7 @@ FROM S_Total_Transactions s
 LEFT JOIN O_Total_Transactions o
 ON s.StoreDate = o.OnlineDate;
 
--- Average transaction amount by product category
+-- 4.4b) Average transaction amount by product category
 
 WITH category_transaction AS (
 SELECT ic.Category, COUNT(s.Prod_Num) + COUNT(o.ProdNum) AS total_transaction
@@ -83,7 +101,7 @@ GROUP BY ic.Category)
 
 SELECT AVG(total_transaction) AS average_transaction FROM category_transaction;
 
--- 
+-- 4.5) In-store sales performance
 SELECT ss.Store_ID, sl.StoreLocation, SUM(ss.Sale_Amount) AS total_sales
 FROM Store_Sales ss
 LEFT JOIN Store_Locations sl
@@ -91,3 +109,5 @@ ON ss.Store_ID = sl.StoreId
 WHERE sl.State = "Colorado"
 GROUP BY ss.Store_ID
 ORDER BY total_sales DESC;
+
+-- 4.6) 

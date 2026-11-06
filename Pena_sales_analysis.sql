@@ -1,45 +1,24 @@
--- Colorado sales territory.
+-- sales territory: Colorado.
 USE sample_sales;
 
 -- 4.1) Find total revenue
-WITH S_Totals AS (
-SELECT SUM(ss.Sale_Amount) AS store_revenue, MIN(ss.Transaction_Date) AS S_Start_Date, MAX(ss.Transaction_Date) AS S_End_Date
+
+SELECT SUM(ss.Sale_Amount) AS store_revenue, MIN(ss.Transaction_Date) AS Start_Date, MAX(ss.Transaction_Date) AS End_Date
 FROM Store_Sales ss
 LEFT JOIN Store_Locations sl
 ON ss.Store_ID = sl.StoreId
-WHERE sl.State = "Colorado"),
+WHERE sl.State = "Colorado";
 
-O_Totals AS (
-SELECT SUM(SalesTotal) online_revenue, MIN(Date) AS O_Start_Date, MAX(Date) AS O_End_Date
-FROM Online_Sales
-WHERE ShiptoState = "Colorado"
-)
-
-SELECT st.S_Start_Date, st.S_End_Date, ot.O_Start_Date, ot.O_End_Date, st.store_revenue + ot.online_revenue AS total_revenue
-FROM S_Totals AS st
-JOIN O_Totals AS ot;
-
-SELECT Date, SalesTotal FROM Online_Sales WHERE ShiptoState = "Colorado";
 
 -- 4.2) Revenue breakdown by year and month
-WITH Store_Totals AS (
+
 SELECT DATE_FORMAT(ss.Transaction_Date, "%m/%Y") AS StoreDate, SUM(ss.Sale_Amount) AS store_amount
 FROM Store_Sales ss
 LEFT JOIN Store_Locations sl
 ON ss.Store_ID = sl.StoreId
 WHERE sl.State = "Colorado"
-GROUP BY StoreDate),
+GROUP BY StoreDate;
 
-Online_Totals AS (
-SELECT DATE_FORMAT(os.Date, "%m/%Y") AS OnlineDate, SUM(os.SalesTotal) AS online_amount
-FROM Online_Sales os
-WHERE os.ShiptoState = "Colorado"
-GROUP BY OnlineDate)
-
-SELECT st.StoreDate, st.store_amount + COALESCE(ot.online_amount, 0) AS Monthly_Totals
-FROM Store_Totals st
-LEFT JOIN Online_Totals ot
-ON st.StoreDate = ot.OnlineDate;
 
 -- 4.3) Comparison of total revenue
 WITH S_Amount AS (
@@ -60,46 +39,35 @@ CONCAT(CAST(ROUND(SUM(oa.online_revenue)/(SUM(sa.store_revenue) + SUM(oa.online_
 FROM S_Amount sa
 JOIN O_Amount oa;
 
-SELECT * FROM Management /*WHERE Region = "West"*/;
-
 
 -- 4.4a) Find number of transactions per month
-WITH S_Total_Transactions AS (
+
 SELECT DATE_FORMAT(ss.Transaction_Date, "%m/%Y") AS StoreDate, COUNT(DATE_FORMAT(ss.Transaction_Date, "%m/%d/%Y")) AS store_transactions
 FROM Store_Sales ss
 LEFT JOIN Store_Locations sl
 ON ss.Store_ID = sl.StoreId
 WHERE sl.State = "Colorado"
-GROUP BY StoreDate),
+GROUP BY StoreDate;
 
-O_Total_Transactions AS (
-SELECT DATE_FORMAT(Date, "%m/%Y") AS OnlineDate, COUNT(DATE_FORMAT(Date, "%m/%d/%Y")) AS online_transactions
-FROM Online_Sales
-WHERE ShiptoState = "Colorado"
-GROUP BY OnlineDate)
-
-SELECT s.StoreDate, s.store_transactions + COALESCE(o.online_transactions, 0) AS monthly_transactions 
-FROM S_Total_Transactions s
-LEFT JOIN O_Total_Transactions o
-ON s.StoreDate = o.OnlineDate;
 
 -- 4.4b) Average transaction amount by product category
 
 WITH category_transaction AS (
-SELECT ic.Category, COUNT(s.Prod_Num) + COUNT(o.ProdNum) AS total_transaction
+SELECT ic.Category AS category, p.Product AS product, COUNT(s.Prod_Num) AS total_transaction
 FROM Inventory_Categories ic
 LEFT JOIN Products p
 ON ic.CategoryId = p.CategoryId
 LEFT JOIN Store_Sales s
 ON p.ProdNum = s.Prod_Num
-LEFT JOIN Online_Sales o
-ON p.ProdNum = o.ProdNum
 LEFT JOIN Store_Locations sl
 ON s.Store_ID = sl.StoreId
-WHERE sl.State = "Colorado" AND o.ShiptoState = "Colorado"
-GROUP BY ic.Category)
+WHERE sl.State = "Colorado"
+GROUP BY p.Product, ic.Category
+)
 
-SELECT AVG(total_transaction) AS average_transaction FROM category_transaction;
+SELECT category, AVG(total_transaction) AS average_transaction 
+FROM category_transaction
+GROUP BY category;
 
 -- 4.5) In-store sales performance
 SELECT ss.Store_ID, sl.StoreLocation, SUM(ss.Sale_Amount) AS total_sales
@@ -110,4 +78,53 @@ WHERE sl.State = "Colorado"
 GROUP BY ss.Store_ID
 ORDER BY total_sales DESC;
 
--- 4.6) 
+
+-- 4.6) Recommendations
+
+SELECT ic.Category AS category, COUNT(s.Prod_Num) AS store_total_transaction, SUM(s.Sale_Amount) AS store_total_sale
+FROM Inventory_Categories ic
+LEFT JOIN Products p
+ON ic.CategoryId = p.CategoryId
+LEFT JOIN Store_Sales s
+ON p.ProdNum = s.Prod_Num
+LEFT JOIN Store_Locations sl
+ON s.Store_ID = sl.StoreId
+WHERE sl.State = "Colorado" AND s.Transaction_Date LIKE "2025-%"
+GROUP BY ic.Category
+ORDER BY store_total_sale DESC;
+
+SELECT DATE_FORMAT(s.Transaction_Date, "%m/%Y") AS StoreDate, SUM(s.Sale_Amount) AS store_amount
+FROM Inventory_Categories ic
+LEFT JOIN Products p
+ON ic.CategoryId = p.CategoryId
+LEFT JOIN Store_Sales s
+ON p.ProdNum = s.Prod_Num
+LEFT JOIN Store_Locations sl
+ON s.Store_ID = sl.StoreId
+WHERE sl.State = "Colorado" AND ic.Category = "Stationery and Supplies"
+GROUP BY StoreDate;
+
+/*
+Findings:
+
+- Best performing category is Technology & Accessories
+- Least performing is Stationery & Supplies
+- Textbooks and Books (General) outperformed Stationery & Supplies, despite less transactions
+- Total sales for October jumped by 68.7% from September, across all product categories.​
+- Total sales for December dropped by 37.6% from October, across all product categories
+
+- Best performing store is Denver
+- Least performing stores are Milliken, Berthoud, Wheat Ridge, and Parker
+- Stores such as Lafayette, Sedalia, and Aurora experienced sales recovery from November to December
+- Grand Junction is the only store that didn't suffer in sales loss.
+
+Recommendation: 
+
+In the next quarter, investigate the cause in total sales drop from October to December. 
+Focus on top performing product categories and store locations. Improve promotions for 
+Textbooks and Books (General) because they generate the most sales relative to their 
+transaction amount. Find out what we did right from September to October that caused 
+the 68.7% increase in sales and how we can replicate that for the next quarter.​ Reach out 
+to the store location in Grand Junction and recovering locations, such as Lafayette and 
+Sedalia, and learn what they are doing to revive their sales.​
+*/
